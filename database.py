@@ -1,4 +1,3 @@
-import asyncio
 from sqlalchemy import BigInteger, Boolean, Column, String
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -22,9 +21,4 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def init_db():
     async with engine.begin() as conn:
-        # Создание таблиц
         await conn.run_sync(Base.metadata.create_all)
-
-async def get_session() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session

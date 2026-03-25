@@ -40,16 +40,14 @@ async def process_toggle_auto_add(callback: types.CallbackQuery):
         user = result.scalar_one_or_none()
         
         if user:
-            # Переключение настройки
             user.auto_add_enabled = not user.auto_add_enabled
             await session.commit()
             
-            # Обновление сообщения с новой клавиатурой
             text = "Настройки бота:\n\nВы можете включить или отключить автоматическое добавление вас в тематические чаты путешествий (по пригласительным ссылкам)."
             try:
                 await callback.message.edit_text(text, reply_markup=get_settings_keyboard(user.auto_add_enabled))
             except Exception:
-                pass # Обработка исключения, если сообщение не было изменено
+                pass
             
             await callback.answer(f"Функция добавления в чаты теперь {'включена' if user.auto_add_enabled else 'выключена'}")
         else:

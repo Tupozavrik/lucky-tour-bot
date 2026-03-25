@@ -11,7 +11,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
 # SQLite databases
 *.sqlite3
 *.db

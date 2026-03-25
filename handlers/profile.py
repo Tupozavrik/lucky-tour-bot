@@ -5,7 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database import AsyncSessionLocal, User
 from sqlalchemy import select
-from services.uon_service import UonMockService
+from services.uon_service import UonService
 from services.chat_manager import ChatManager
 
 router = Router(name="profile_router")
@@ -34,7 +34,7 @@ async def cmd_profile(message: types.Message):
             return
 
         if user.uon_id:
-            destination = await UonMockService.get_user_destination(user.uon_id)
+            destination = await UonService.get_user_destination(user.uon_id)
             dest_text = destination if destination else "Не найдено или недействительно"
             text = f"👤 **Ваш Профиль**\n\nТекущий U-ON ID: `{user.uon_id}`\nТекущее направление: **{dest_text}**"
         else:
@@ -50,12 +50,10 @@ def get_cancel_keyboard() -> types.InlineKeyboardMarkup:
 @router.callback_query(F.data == "change_uon_id")
 async def process_change_uon_id(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.waiting_for_uon_id)
-    # Удаляем инлайн кнопки из предыдущего сообщения чтобы они не "висели"
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    # Отправляем сообщение
     await callback.message.answer(
         "Пожалуйста, отправьте мне ваш новый уникальный идентификатор U-ON в ответном сообщении:",
         reply_markup=get_cancel_keyboard()
@@ -91,8 +89,6 @@ async def process_new_uon_id(message: types.Message, state: FSMContext, bot: Bot
         
     await state.clear()
     await message.answer(f"✅ Ваш уникальный идентификатор `{text}` успешно привязан!", parse_mode="Markdown")
-    
-    # Пытаемся сразу проверить направление
     await check_and_invite_user(message, bot, text, user.auto_add_enabled)
 
 @router.callback_query(F.data == "refresh_destination")
@@ -112,20 +108,21 @@ async def process_refresh_destination(callback: types.CallbackQuery, bot: Bot):
 
 
 async def check_and_invite_user(message: types.Message, bot: Bot, uon_id: str, auto_add_enabled: bool):
-    destination = await UonMockService.get_user_destination(uon_id)
+    destination = await UonService.get_user_destination(uon_id)
     
     if destination:
         await message.answer(f"По данным U-ON вы летите в: **{destination}**", parse_mode="Markdown")
         
         if auto_add_enabled:
-            invite_link = await ChatManager.generate_invite_link(bot, destination)
-            if invite_link:
+            links = await ChatManager.generate_invite_links(bot, destination)
+            if links:
+                links_text = "\n".join([f"👉 {link['name']}: {link['url']}" for link in links])
                 await message.answer(
-                    f"Так как у вас включено добавление в чаты, мы сгенерировали для вас пригласительную ссылку в чат направления {destination}:\n\n"
-                    f"👉 {invite_link}"
+                    f"Так как у вас включено добавление в чаты, мы сгенерировали для вас пригласительные ссылки для направления {destination}:\n\n"
+                    f"{links_text}"
                 )
             else:
-                await message.answer("К сожалению, тематический чат для этого направления еще не настроен или я не могу создать ссылку.")
+                await message.answer("К сожалению, тематические чаты для этого направления еще не настроены или я не могу создать ссылку.")
         else:
             await message.answer("Функция автоматического добавления в тематические чаты отключена. Вы можете включить её в /settings.")
     else:

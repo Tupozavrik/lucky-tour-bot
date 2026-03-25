@@ -3,16 +3,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "5476095283:AAF_pFihJibLQWvrrX3oKvkIeFza7b6XxLk")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 UON_API_KEY = os.getenv("UON_API_KEY", "")
 DB_PATH = os.getenv("DB_PATH", "lucky_tour.db")
 
-# Примеры тематических чатов (Замените на ваши актуальные ID чатов или используйте переменные окружения)
-# Бот должен быть администратором в этих чатах для генерации пригласительных ссылок.
+# Бот должен быть администратором в этих чатах
 THEMATIC_CHATS = {
-    "Turkey": -1001234567890,
-    "Egypt": -1000987654321
+    "Turkey": {
+        "main": -1003743821562,
+        "secret": -1000987654321
+    },
+    "Egypt": {
+        "main": -1003794486597,
+        "secret": -1004445556667
+    }
 }
 
-# Базовый URL для UON API или настройки заглушки (mock).
+SUPPORT_CHAT_URL = os.getenv("SUPPORT_CHAT_URL", "https://t.me/zxcwed")
 UON_BASE_URL = "https://api.u-on.ru/"
