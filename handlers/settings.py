@@ -33,9 +33,9 @@ SETTINGS_TEXT = (
 
 @router.message(F.text == "⚙️ Настройки")
 @router.message(Command("settings"))
-async def cmd_settings(message: types.Message) -> None:
+async def cmd_settings(message: types.Message, session) -> None:
     """Показывает меню настроек."""
-    user = await UserRepository.get_user(message.from_user.id)
+    user = await UserRepository.get_user(session, message.from_user.id)
 
     if not user:
         await message.answer("Сначала напишите /start.")
@@ -45,9 +45,9 @@ async def cmd_settings(message: types.Message) -> None:
 
 
 @router.callback_query(F.data == "toggle_auto_add")
-async def process_toggle_auto_add(callback: types.CallbackQuery) -> None:
+async def process_toggle_auto_add(callback: types.CallbackQuery, session) -> None:
     """Переключает настройку автоматического добавления в чаты."""
-    new_value = await UserRepository.toggle_auto_add(callback.from_user.id)
+    new_value = await UserRepository.toggle_auto_add(session, callback.from_user.id)
 
     if new_value is None:
         await callback.answer("Пользователь не найден. Напишите /start.", show_alert=True)
