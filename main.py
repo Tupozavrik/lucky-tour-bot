@@ -1,7 +1,8 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
-from config import BOT_TOKEN
+from aiogram.client.session.aiohttp import AiohttpSession
+from config import BOT_TOKEN, PROXY_URL
 from database import init_db
 from handlers import setup_routers
 
@@ -15,7 +16,12 @@ async def main():
 
     await init_db()
 
-    bot = Bot(token=BOT_TOKEN)
+    session = None
+    if PROXY_URL:
+        logger.info(f"Using proxy: {PROXY_URL}")
+        session = AiohttpSession(proxy=PROXY_URL)
+
+    bot = Bot(token=BOT_TOKEN, session=session)
     dp = Dispatcher()
     
     routers = setup_routers()

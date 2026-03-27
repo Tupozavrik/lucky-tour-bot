@@ -6,6 +6,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 UON_API_KEY = os.getenv("UON_API_KEY", "")
 DB_PATH = os.getenv("DB_PATH", "lucky_tour.db")
+PROXY_URL = os.getenv("PROXY_URL", "")
 
 # Бот должен быть администратором в этих чатах
 THEMATIC_CHATS = {
