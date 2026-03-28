@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +13,6 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 
 UON_BASE_URL = "https://api.u-on.ru/"
 
-import json
 
 # Конфигурация направлений загружается из destinations.json
 DESTINATIONS_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "destinations.json")

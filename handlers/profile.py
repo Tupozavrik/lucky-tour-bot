@@ -99,7 +99,7 @@ async def process_new_uon_id(message: types.Message, state: FSMContext, bot: Bot
     text = message.text.strip()
     user_id = message.from_user.id
 
-    if not text.isdigit():
+    if not text.isdigit() or len(text) > 50:
         await message.answer(
             "Пожалуйста, отправьте корректный числовой идентификатор.\n"
             "Для отмены нажмите кнопку ниже или введите /profile.",
