@@ -32,7 +32,7 @@ cp .env.example .env
 python main.py
 ```
 
-## 🏗 Архитектура
+## Архитектура
 
 - `main.py` — Точка входа в приложение (Bot & Dispatcher), внедрение Middleware.
 - `database.py` — Конфигурация SQLAlchemy и модели.
@@ -41,7 +41,7 @@ python main.py
 - `middlewares/` — Промежуточное ПО (`ThrottlingMiddleware` и `DbSessionMiddleware`).
 - `config.py` — Вводные конфигурации и парсинг `.env`.
 
-## 🛡 Тестирование
+## Тестирование
 
 Для запуска тестов используйте `pytest`:
 ```bash
