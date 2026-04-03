@@ -1,12 +1,8 @@
-### LUCKY TOUR BOT
 
-Установка и запуск
-
-### 1. Требования
 - Python 3.10 или выше.
-- [Redis](https://redis.io/docs/install/) (рекомендуется для сохранения сессий и защиты от спама.)
-### 2. Клонирование и зависимости
-- Создайте виртуальное окружение и установите пакеты:
+- [Redis](https://redis.io/docs/install/) (рекомендуется для сохранения сессий и защиты от спама).
+
+Создайте виртуальное окружение и установите пакеты:
 ```bash
 python -m venv venv
 
@@ -20,14 +16,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Конфигурация (.env)
 Скопируйте файл `.env.example` в `.env`:
 ```bash
 cp .env.example .env
 ```
 И заполните его вашими данными. Обратите внимание на переменную `REDIS_URL`. Если вы не хотите использовать Redis для локальной разработки, просто оставьте ее закомментированной (бот откатится на MemoryStorage).
 
-### 4. Запуск (локально)
 ```bash
 python main.py
 ```
@@ -36,7 +30,7 @@ python main.py
 
 - `main.py` — Точка входа в приложение (Bot & Dispatcher), внедрение Middleware.
 - `database.py` — Конфигурация SQLAlchemy и модели.
-- `handlers/` — Роутеры и обработчики команд/кнопок Telegram 
+- `handlers/` — Роутеры и обработчики команд/кнопок Telegram (MVC-контроллеры).
 - `services/` — Бизнес-логика изоляции (CRM интеграция, генерация ссылок, репозитории).
 - `middlewares/` — Промежуточное ПО (`ThrottlingMiddleware` и `DbSessionMiddleware`).
 - `config.py` — Вводные конфигурации и парсинг `.env`.

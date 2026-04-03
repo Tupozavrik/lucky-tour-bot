@@ -7,7 +7,7 @@ from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
-from config import SUPPORT_CHAT_URL
+from config import SUPPORT_CHAT_URL, WEB_APP_URL
 from services.user_repository import UserRepository
 from services.invite_service import InviteService
 from services.uon_service import UonApiError
@@ -22,10 +22,11 @@ router = Router(name="start_router")
 def get_main_keyboard() -> types.ReplyKeyboardMarkup:
     """Главное Reply-меню бота."""
     builder = ReplyKeyboardBuilder()
+    builder.button(text="🌐 Веб-приложение", web_app=types.WebAppInfo(url=WEB_APP_URL))
     builder.button(text="👤 Профиль")
     builder.button(text="⚙️ Настройки")
     builder.button(text="💬 Поддержка")
-    builder.adjust(2, 1)
+    builder.adjust(2, 2)
     return builder.as_markup(resize_keyboard=True)
 
 

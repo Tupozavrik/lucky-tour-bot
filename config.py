@@ -10,6 +10,7 @@ DB_PATH = os.getenv("DB_PATH", "lucky_tour.db")
 PROXY_URL = os.getenv("PROXY_URL", "")
 SUPPORT_CHAT_URL = os.getenv("SUPPORT_CHAT_URL", "https://t.me/zxcwed")
 REDIS_URL = os.getenv("REDIS_URL", "")
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://example.com")
 
 UON_BASE_URL = "https://api.u-on.ru/"
 
