@@ -1,123 +1,129 @@
-"""Обработчики команды /start, поддержки и DeepLink-привязки."""
+"""Обработчики команды /start и DeepLink-привязки (Telethon)."""
 
 import logging
 
-from aiogram import Router, types, Bot, F
-from aiogram.filters import CommandStart, CommandObject
-from aiogram.fsm.context import FSMContext
-from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from telethon import TelegramClient, events, Button
+from telethon.tl.types import (
+    ReplyKeyboardMarkup, KeyboardButtonRow,
+    KeyboardButtonWebView, KeyboardButton,
+)
 
-from config import SUPPORT_CHAT_URL, WEB_APP_URL
+from config import WEB_APP_URL
+from database import AsyncSessionLocal
 from services.user_repository import UserRepository
 from services.invite_service import InviteService
 from services.uon_service import UonApiError
-
-from .profile import ProfileStates
+from utils.state_machine import set_state, WAITING_FOR_UON_ID
+from utils.throttle import throttled
 
 logger = logging.getLogger(__name__)
 
-router = Router(name="start_router")
 
-
-def get_main_keyboard() -> types.ReplyKeyboardMarkup:
+def get_main_keyboard() -> ReplyKeyboardMarkup:
     """Главное Reply-меню бота."""
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="🌐 Веб-приложение", web_app=types.WebAppInfo(url=WEB_APP_URL))
-    builder.button(text="👤 Профиль")
-    builder.button(text="⚙️ Настройки")
-    builder.button(text="💬 Поддержка")
-    builder.adjust(2, 2)
-    return builder.as_markup(resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        rows=[
+            KeyboardButtonRow(buttons=[
+                KeyboardButtonWebView(text="🌐 Веб-приложение", url=WEB_APP_URL),
+                KeyboardButton(text="👤 Профиль"),
+            ]),
+            KeyboardButtonRow(buttons=[
+                KeyboardButton(text="⚙️ Настройки"),
+                KeyboardButton(text="💬 Поддержка"),
+            ]),
+        ],
+        resize=True,
+    )
 
 
-@router.message(CommandStart())
-async def cmd_start(message: types.Message, command: CommandObject, state: FSMContext, bot: Bot, session) -> None:
-    """Обработка /start с опциональным DeepLink (t.me/bot?start=id84756)."""
-    user_id = message.from_user.id
-    await UserRepository.get_or_create_user(session, user_id)
+def register_start_handlers(client: TelegramClient) -> None:
+    """Регистрирует хэндлеры /start и связанных callback-запросов."""
 
-    # DeepLink: t.me/LuckyTourBot?start=id84756
-    args = command.args
-    if args and args.startswith("id"):
-        uon_id_from_link = args[2:]
-        if uon_id_from_link.isdigit():
-            await UserRepository.update_uon_id(session, user_id, uon_id_from_link)
+    @client.on(events.NewMessage(
+        pattern=r'^/start(?:@\w+)?(?:\s(.+))?$',
+        func=lambda e: e.is_private,
+    ))
+    @throttled
+    async def cmd_start(event) -> None:
+        """Обработка /start с опциональным DeepLink (t.me/bot?start=id84756)."""
+        user_id = event.sender_id
+        sender = await event.get_sender()
+        first_name = (getattr(sender, "first_name", None) or "друг")
+        args = event.pattern_match.group(1)
+        uon_id_from_link = None
 
-            await message.answer(
-                f"🙋 Привет, {message.from_user.first_name}!\n\n"
+        async with AsyncSessionLocal() as session:
+            await UserRepository.get_or_create_user(session, user_id)
+            if args and args.startswith("id") and args[2:].isdigit():
+                uon_id_from_link = args[2:]
+                await UserRepository.update_uon_id(session, user_id, uon_id_from_link)
+            await session.commit()
+
+        if uon_id_from_link:
+            await event.respond(
+                f"🙋 Привет, {first_name}!\n\n"
                 f"Мы успешно распознали вас! Ваш U-ON ID: <code>{uon_id_from_link}</code> привязан.",
-                reply_markup=get_main_keyboard(),
+                buttons=get_main_keyboard(),
+                parse_mode="html",
             )
-
-            builder = InlineKeyboardBuilder()
-            builder.button(text="✅ Да, добавить меня в чаты", callback_data=f"enable_autoadd_{uon_id_from_link}")
-            builder.button(text="❌ Нет, спасибо", callback_data="disable_autoadd")
-            builder.adjust(1)
-
-            await message.answer(
+            await event.respond(
                 "Мы создали специальные закрытые чаты для туристов вашего направления "
-                "(поиск попутчиков, секретные места).\n\n"
-                "Желаете получить пригласительные ссылки?",
-                reply_markup=builder.as_markup(),
+                "(поиск попутчиков, секретные места).\n\nЖелаете получить пригласительные ссылки?",
+                buttons=[
+                    [Button.inline("✅ Да, добавить меня в чаты",
+                                   f"enable_autoadd_{uon_id_from_link}".encode())],
+                    [Button.inline("❌ Нет, спасибо", b"disable_autoadd")],
+                ],
             )
             return
 
-    await message.answer(
-        f"🙋 Привет, {message.from_user.first_name}!\n\n"
-        "Я ваш тур-ассистент. Чтобы добавлять вас в тематические чаты и помогать с туром, "
-        "пожалуйста, <b>привяжите ваш аккаунт к системе U-ON</b>.\n\n"
-        "Для этого отправьте мне ваш уникальный идентификатор U-ON в следующем сообщении.",
-        reply_markup=get_main_keyboard(),
-    )
-    await state.set_state(ProfileStates.waiting_for_uon_id)
-
-
-@router.message(F.text == "💬 Поддержка")
-async def support_handler(message: types.Message) -> None:
-    """Отправляет кнопку-ссылку на чат поддержки."""
-    builder = InlineKeyboardBuilder()
-    builder.button(text="Перейти в чат поддержки", url=SUPPORT_CHAT_URL)
-    await message.answer(
-        "Возникли вопросы? Наша служба поддержки всегда на связи!",
-        reply_markup=builder.as_markup(),
-    )
-
-
-@router.callback_query(F.data.startswith("enable_autoadd_"))
-async def process_enable_autoadd(callback: types.CallbackQuery, bot: Bot, session) -> None:
-    """Пользователь согласился на добавление в тематические чаты."""
-    uon_id = callback.data.removeprefix("enable_autoadd_")
-    user_id = callback.from_user.id
-
-    await UserRepository.set_auto_add(session, user_id, True)
-    await callback.message.edit_text("Вы согласились на добавление в чаты! Генерируем ссылки ⏳...")
-
-    try:
-        result = await InviteService.check_and_invite(bot, uon_id, auto_add_enabled=True)
-    except UonApiError as e:
-        await callback.message.answer(f"⚠️ {e}")
-        await callback.answer()
-        return
-
-    if result.links:
-        links_text = "\n".join(f"👉 {link['name']}: {link['url']}" for link in result.links)
-        await callback.message.answer(
-            f"Пригласительные ссылки для направления {result.destination}:\n\n{links_text}"
+        await event.respond(
+            f"🙋 Привет, {first_name}!\n\n"
+            "Я ваш тур-ассистент. Чтобы добавлять вас в тематические чаты и помогать с туром, "
+            "пожалуйста, <b>привяжите ваш аккаунт к системе U-ON</b>.\n\n"
+            "Для этого отправьте мне ваш уникальный идентификатор U-ON в следующем сообщении.",
+            buttons=get_main_keyboard(),
+            parse_mode="html",
         )
-    elif result.destination:
-        await callback.message.answer(
-            "К сожалению, тематические чаты для этого направления ещё не настроены. "
-            "Обратитесь в службу поддержки."
-        )
+        set_state(user_id, WAITING_FOR_UON_ID)
 
-    await callback.answer()
+    @client.on(events.CallbackQuery(pattern=rb"^enable_autoadd_(.+)$"))
+    async def process_enable_autoadd(event) -> None:
+        """Пользователь согласился на добавление в тематические чаты."""
+        uon_id = event.pattern_match.group(1).decode()
+        user_id = event.sender_id
 
+        async with AsyncSessionLocal() as session:
+            await UserRepository.set_auto_add(session, user_id, True)
+            await session.commit()
 
-@router.callback_query(F.data == "disable_autoadd")
-async def process_disable_autoadd(callback: types.CallbackQuery, session) -> None:
-    """Пользователь отказался от приглашений в чаты."""
-    await UserRepository.set_auto_add(session, callback.from_user.id, False)
-    await callback.message.edit_text(
-        "Вы отказались от приглашений. Включить эту функцию можно позже в настройках."
-    )
-    await callback.answer()
+        await event.edit("Вы согласились на добавление в чаты! Генерируем ссылки ⏳...")
+
+        try:
+            result = await InviteService.check_and_invite(event.client, uon_id, auto_add_enabled=True)
+        except UonApiError as e:
+            await event.respond(f"⚠️ {e}")
+            await event.answer()
+            return
+
+        if result.links:
+            links_text = "\n".join(f"👉 {link['name']}: {link['url']}" for link in result.links)
+            await event.respond(
+                f"Пригласительные ссылки для направления {result.destination}:\n\n{links_text}"
+            )
+        elif result.destination:
+            await event.respond(
+                "К сожалению, тематические чаты для этого направления ещё не настроены. "
+                "Обратитесь в службу поддержки."
+            )
+        await event.answer()
+
+    @client.on(events.CallbackQuery(data=b"disable_autoadd"))
+    async def process_disable_autoadd(event) -> None:
+        """Пользователь отказался от приглашений в чаты."""
+        async with AsyncSessionLocal() as session:
+            await UserRepository.set_auto_add(session, event.sender_id, False)
+            await session.commit()
+
+        await event.edit("Вы отказались от приглашений. Включить эту функцию можно позже в настройках.")
+        await event.answer()

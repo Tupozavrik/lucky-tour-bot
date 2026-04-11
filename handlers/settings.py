@@ -1,28 +1,14 @@
-"""Обработчики настроек: тоггл автоматического добавления в чаты."""
+"""Обработчики настроек: тоггл автоматического добавления в чаты (Telethon)."""
 
 import logging
 
-from aiogram import Router, types, F
-from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from telethon import TelegramClient, events, Button
 
+from database import AsyncSessionLocal
 from services.user_repository import UserRepository
+from utils.throttle import throttled
 
 logger = logging.getLogger(__name__)
-
-router = Router(name="settings_router")
-
-
-def get_settings_keyboard(auto_add_enabled: bool) -> types.InlineKeyboardMarkup:
-    """Inline-клавиатура настроек с текущим статусом auto_add."""
-    builder = InlineKeyboardBuilder()
-    status_emoji = "✅ Включено" if auto_add_enabled else "❌ Выключено"
-    builder.button(
-        text=f"Добавление в чаты: {status_emoji}",
-        callback_data="toggle_auto_add"
-    )
-    return builder.as_markup()
-
 
 SETTINGS_TEXT = (
     "Настройки бота:\n\n"
@@ -31,32 +17,48 @@ SETTINGS_TEXT = (
 )
 
 
-@router.message(F.text == "⚙️ Настройки")
-@router.message(Command("settings"))
-async def cmd_settings(message: types.Message, session) -> None:
-    """Показывает меню настроек."""
-    user = await UserRepository.get_user(session, message.from_user.id)
+def get_settings_keyboard(auto_add_enabled: bool) -> list:
+    """Inline-клавиатура настроек с текущим статусом auto_add."""
+    status = "✅ Включено" if auto_add_enabled else "❌ Выключено"
+    return [[Button.inline(f"Добавление в чаты: {status}", b"toggle_auto_add")]]
+
+
+async def show_settings_page(event) -> None:
+    """Показывает меню настроек. Вызывается из text_router и /settings."""
+    async with AsyncSessionLocal() as session:
+        user = await UserRepository.get_user(session, event.sender_id)
 
     if not user:
-        await message.answer("Сначала напишите /start.")
+        await event.respond("Сначала напишите /start.")
         return
 
-    await message.answer(SETTINGS_TEXT, reply_markup=get_settings_keyboard(user.auto_add_enabled))
+    await event.respond(SETTINGS_TEXT, buttons=get_settings_keyboard(user.auto_add_enabled))
 
 
-@router.callback_query(F.data == "toggle_auto_add")
-async def process_toggle_auto_add(callback: types.CallbackQuery, session) -> None:
-    """Переключает настройку автоматического добавления в чаты."""
-    new_value = await UserRepository.toggle_auto_add(session, callback.from_user.id)
+def register_settings_handlers(client: TelegramClient) -> None:
+    """Регистрирует хэндлеры настроек."""
 
-    if new_value is None:
-        await callback.answer("Пользователь не найден. Напишите /start.", show_alert=True)
-        return
+    @client.on(events.NewMessage(pattern=r"^/settings(?:@\w+)?$", func=lambda e: e.is_private))
+    @throttled
+    async def cmd_settings(event) -> None:
+        """Показывает меню настроек по команде."""
+        await show_settings_page(event)
 
-    try:
-        await callback.message.edit_text(SETTINGS_TEXT, reply_markup=get_settings_keyboard(new_value))
-    except Exception:
-        logger.debug("Не удалось обновить сообщение настроек — контент не изменился")
+    @client.on(events.CallbackQuery(data=b"toggle_auto_add"))
+    async def process_toggle_auto_add(event) -> None:
+        """Переключает настройку автоматического добавления в чаты."""
+        async with AsyncSessionLocal() as session:
+            new_value = await UserRepository.toggle_auto_add(session, event.sender_id)
+            await session.commit()
 
-    status = "включена" if new_value else "выключена"
-    await callback.answer(f"Функция добавления в чаты теперь {status}")
+        if new_value is None:
+            await event.answer("Пользователь не найден. Напишите /start.", alert=True)
+            return
+
+        try:
+            await event.edit(SETTINGS_TEXT, buttons=get_settings_keyboard(new_value))
+        except Exception:
+            logger.debug("Не удалось обновить сообщение настроек — контент не изменился")
+
+        status = "включена" if new_value else "выключена"
+        await event.answer(f"Функция добавления в чаты теперь {status}")

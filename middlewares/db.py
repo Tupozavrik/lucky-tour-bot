@@ -1,40 +1,15 @@
-"""Middleware для прокидывания сессии базы данных в хэндлеры."""
+"""Утилита для работы с сессией БД в хэндлерах Pyrogram.
 
-import logging
-from collections.abc import Awaitable, Callable
-from typing import Any
+Этот модуль больше не используется как aiogram-middleware.
+Каждый хэндлер открывает сессию напрямую:
 
-from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
-from sqlalchemy.ext.asyncio import async_sessionmaker
+    async with AsyncSessionLocal() as session:
+        ...
+        await session.commit()
 
-logger = logging.getLogger(__name__)
+Модуль оставлен для обратной совместимости и тестов.
+"""
 
-class DbSessionMiddleware(BaseMiddleware):
-    """
-    Создает новую AsyncSession на каждый апдейт (событие) от Telegram 
-    и помещает её в `data["session"]`.
-    Автоматически делает commit при успехе и rollback при ошибке.
-    """
+from database import AsyncSessionLocal
 
-    def __init__(self, session_pool: async_sessionmaker) -> None:
-        super().__init__()
-        self.session_pool = session_pool
-
-    async def __call__(
-        self,
-        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
-        event: TelegramObject,
-        data: dict[str, Any],
-    ) -> Any:
-        # Автоматически открываем и закрываем сессию вокруг вызова хэндлера
-        async with self.session_pool() as session:
-            data["session"] = session
-            try:
-                result = await handler(event, data)
-                await session.commit()
-                return result
-            except Exception as e:
-                await session.rollback()
-                logger.error("Ошибка хендлера (transaction rollback): %s", e, exc_info=True)
-                raise
+__all__ = ["AsyncSessionLocal"]

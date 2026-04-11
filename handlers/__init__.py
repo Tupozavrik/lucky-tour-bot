@@ -1,14 +1,17 @@
-from aiogram import Router
-from .start import router as start_router
-from .settings import router as settings_router
-from .profile import router as profile_router
+from telethon import TelegramClient
 
-def setup_routers() -> list[Router]:
+from .start import register_start_handlers
+from .settings import register_settings_handlers
+from .profile import register_profile_handlers
+
+
+def setup_handlers(client: TelegramClient) -> None:
+    """Регистрирует все хэндлеры в приложении Telethon.
+
+    Порядок регистрации важен:
+    - profile — первым, содержит text_router (FSM + кнопки меню)
+    - start, settings — командные и callback хэндлеры
     """
-    Возвращает список всех роутеров для включения в диспетчер.
-    """
-    return [
-        start_router,
-        settings_router,
-        profile_router
-    ]
+    register_profile_handlers(client)
+    register_start_handlers(client)
+    register_settings_handlers(client)

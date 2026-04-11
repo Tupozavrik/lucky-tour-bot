@@ -1,22 +1,14 @@
-"""Точка входа: инициализация бота и запуск polling."""
+"""Точка входа: инициализация бота на Telethon (native MTProto) и запуск."""
 
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
-from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.redis import RedisStorage
-from redis.asyncio.client import Redis
+from telethon import TelegramClient
 
-from config import BOT_TOKEN, PROXY_URL, REDIS_URL, UON_API_KEY
-from database import init_db, AsyncSessionLocal
-from handlers import setup_routers
+from config import BOT_TOKEN, API_ID, API_HASH, UON_API_KEY, PROXY_URL
+from database import init_db
 from services.uon_service import UonService
-from middlewares.db import DbSessionMiddleware
-from middlewares.throttling import ThrottlingMiddleware
+from handlers import setup_handlers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,9 +17,64 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _build_proxy_kwargs(proxy_url: str) -> dict:
+    """Парсит PROXY_URL и возвращает kwargs для TelegramClient.
+
+    Поддерживаемые форматы:
+      mtproto://host:port?secret=dd...  (MTProto proxy, в т.ч. fake-TLS)
+      socks5://user:pass@host:port      (SOCKS5)
+      socks4://host:port                (SOCKS4)
+      http://host:port                  (HTTP proxy)
+    """
+    if not proxy_url:
+        return {}
+
+    from urllib.parse import urlparse, parse_qs
+
+    parsed = urlparse(proxy_url)
+    scheme = parsed.scheme.lower()
+
+    if scheme == "mtproto":
+        secret = parse_qs(parsed.query).get("secret", [None])[0] or ""
+        # Telethon 1.43 сам обрабатывает dd-секреты (fake-TLS):
+        # normalize_secret() срезает префикс 'dd'/'ee' и использует
+        # оставшиеся 16 байт с RandomizedIntermediate-обфускацией.
+        from telethon.network import ConnectionTcpMTProxyRandomizedIntermediate
+        logger.info("MTProto прокси: %s:%d (секрет: %s...)",
+                    parsed.hostname, parsed.port, secret[:6])
+        return {
+            "connection": ConnectionTcpMTProxyRandomizedIntermediate,
+            "proxy": (parsed.hostname, parsed.port, secret),
+        }
+
+    # SOCKS5 / SOCKS4 / HTTP — через модуль socks
+    import socks  # PySocks, устанавливается с Telethon автоматически
+
+    scheme_map = {
+        "socks5": socks.SOCKS5,
+        "socks4": socks.SOCKS4,
+        "http":   socks.HTTP,
+    }
+    proxy_type = scheme_map.get(scheme)
+    if not proxy_type:
+        logger.warning("Неизвестный тип прокси '%s' — игнорируем", scheme)
+        return {}
+
+    proxy_tuple: tuple = (proxy_type, parsed.hostname, parsed.port or 1080, True)
+    if parsed.username:
+        proxy_tuple += (parsed.username, parsed.password or "")
+
+    logger.info("SOCKS/HTTP прокси: %s://%s:%d", scheme, parsed.hostname, parsed.port)
+    return {"proxy": proxy_tuple}
+
+
 async def main() -> None:
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN не задан. Укажите его в файле .env")
+        return
+
+    if not API_ID or not API_HASH:
+        logger.error("API_ID или API_HASH не заданы. Укажите их в файле .env")
         return
 
     if not UON_API_KEY or UON_API_KEY == "YOUR_UON_API_KEY_HERE":
@@ -41,65 +88,28 @@ async def main() -> None:
     await init_db()
     UonService.init_session()
 
-    session = None
-    if PROXY_URL:
-        logger.info("Используем прокси: %s", PROXY_URL)
-        session = AiohttpSession(proxy=PROXY_URL)
+    proxy_kwargs = _build_proxy_kwargs(PROXY_URL)
 
-    # Подключение к Redis (FSM + Throttling)
-    redis_client = None
-    storage = MemoryStorage()
-    
-    if REDIS_URL:
-        try:
-            logger.info("Используем Redis (%s)", REDIS_URL)
-            redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
-            # Принудительный пинг для проверки коннекта на старте (опционально)
-            # await redis_client.ping() 
-            storage = RedisStorage(redis=redis_client)
-        except Exception as e:
-            logger.error("Ошибка при подключении к Redis, откатываемся на MemoryStorage: %s", e)
-    else:
-        logger.warning("REDIS_URL не задан, используем локальную память (MemoryStorage)")
-
-    bot = Bot(
-        token=BOT_TOKEN,
-        session=session,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    client = TelegramClient(
+        session="lucky_tour_bot",
+        api_id=API_ID,
+        api_hash=API_HASH,
+        **proxy_kwargs,
     )
-    dp = Dispatcher(storage=storage)
 
-    # Внедрение зависимостей: прокидываем сессию БД во все хэндлеры
-    dp.update.middleware(DbSessionMiddleware(session_pool=AsyncSessionLocal))
-    
-    # Защита от спама (ограничение скорости сообщений)
-    dp.message.middleware(ThrottlingMiddleware(redis=redis_client, rate_limit=1.5))
+    setup_handlers(client)
 
-    for router in setup_routers():
-        dp.include_router(router)
+    logger.info("Бот запускается на Telethon (native MTProto)...")
+    await client.start(bot_token=BOT_TOKEN)
+    me = await client.get_me()
+    logger.info("Бот запущен как @%s", me.username)
 
-    # Глобальный обработчик ошибок
-    @dp.errors()
-    async def global_error_handler(event: types.ErrorEvent):
-        logger.critical("Критическая ошибка: %s", event.exception, exc_info=True)
-        if event.update.message:
-            await event.update.message.answer("Ой! Что-то сломалось на нашей стороне. Мы уже чиним 🛠️")
-        elif event.update.callback_query:
-            await event.update.callback_query.answer("Внутренняя ошибка сервера", show_alert=True)
-
-    logger.info("Бот запущен, начинаем polling...")
     try:
-        await dp.start_polling(bot)
+        await client.run_until_disconnected()
     finally:
-        await bot.session.close()
         await UonService.close_session()
-        if redis_client:
-            await redis_client.close()
         logger.info("Бот остановлен.")
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    asyncio.run(main())

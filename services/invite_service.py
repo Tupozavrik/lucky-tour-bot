@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 
-from aiogram import Bot
+from telethon import TelegramClient
 
 from services.uon_service import UonService
 from services.chat_manager import ChatManager
@@ -23,7 +23,9 @@ class InviteService:
     """Бизнес-логика: проверка направления пользователя и генерация приглашений."""
 
     @staticmethod
-    async def check_and_invite(bot: Bot, uon_id: str, auto_add_enabled: bool) -> InviteResult:
+    async def check_and_invite(
+        client: TelegramClient, uon_id: str, auto_add_enabled: bool
+    ) -> InviteResult:
         """
         Проверяет направление по U-ON ID и генерирует invite-ссылки (если auto_add включён).
 
@@ -38,5 +40,5 @@ class InviteService:
         if not auto_add_enabled:
             return InviteResult(destination=destination, auto_add_disabled=True)
 
-        links = await ChatManager.generate_invite_links(bot, destination)
+        links = await ChatManager.generate_invite_links(client, destination)
         return InviteResult(destination=destination, links=links if links else None)

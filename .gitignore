@@ -21,3 +21,7 @@ lucky_tour.db
 
 # Logs
 *.log
+
+# Pyrogram session files
+*.session
+*.session-journal
