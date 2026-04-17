@@ -1,4 +1,4 @@
-"""Сервис для проверки направления и генерации invite-ссылок в тематические чаты."""
+# Сервис для ссылок и инвайтов
 
 import logging
 from dataclasses import dataclass
@@ -13,25 +13,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class InviteResult:
-    """Результат проверки направления и генерации ссылок."""
+    # что в итоге получилось после проверки
     destination: str | None = None
     links: list[dict[str, str]] | None = None
     auto_add_disabled: bool = False
 
 
 class InviteService:
-    """Бизнес-логика: проверка направления пользователя и генерация приглашений."""
+    # бизнес-логика тут
 
     @staticmethod
     async def check_and_invite(
         client: TelegramClient, uon_id: str, auto_add_enabled: bool
     ) -> InviteResult:
-        """
-        Проверяет направление по U-ON ID и генерирует invite-ссылки (если auto_add включён).
-
-        Returns:
-            InviteResult с заполненными полями в зависимости от результата.
-        """
+        # основная функция: чекаем тур и даем ссылки
         destination = await UonService.get_user_destination(uon_id)
 
         if not destination:

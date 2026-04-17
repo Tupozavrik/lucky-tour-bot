@@ -1,3 +1,4 @@
+# Тут всё про базу и модели данных
 from sqlalchemy import BigInteger, Boolean, Column, String
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker

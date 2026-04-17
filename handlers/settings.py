@@ -1,4 +1,4 @@
-"""Обработчики настроек: тоггл автоматического добавления в чаты (Telethon)."""
+# Настройки: уведомления и всё такое
 
 import logging
 
@@ -18,13 +18,13 @@ SETTINGS_TEXT = (
 
 
 def get_settings_keyboard(auto_add_enabled: bool) -> list:
-    """Inline-клавиатура настроек с текущим статусом auto_add."""
+    # кнопки настроек
     status = "✅ Включено" if auto_add_enabled else "❌ Выключено"
     return [[Button.inline(f"Добавление в чаты: {status}", b"toggle_auto_add")]]
 
 
 async def show_settings_page(event) -> None:
-    """Показывает меню настроек. Вызывается из text_router и /settings."""
+    # само меню
     async with AsyncSessionLocal() as session:
         user = await UserRepository.get_user(session, event.sender_id)
 
@@ -36,17 +36,17 @@ async def show_settings_page(event) -> None:
 
 
 def register_settings_handlers(client: TelegramClient) -> None:
-    """Регистрирует хэндлеры настроек."""
+    # регистрация
 
     @client.on(events.NewMessage(pattern=r"^/settings(?:@\w+)?$", func=lambda e: e.is_private))
     @throttled
     async def cmd_settings(event) -> None:
-        """Показывает меню настроек по команде."""
+        # меню по команде 
         await show_settings_page(event)
 
     @client.on(events.CallbackQuery(data=b"toggle_auto_add"))
     async def process_toggle_auto_add(event) -> None:
-        """Переключает настройку автоматического добавления в чаты."""
+        # переключаем автодобавление 
         async with AsyncSessionLocal() as session:
             new_value = await UserRepository.toggle_auto_add(session, event.sender_id)
             await session.commit()

@@ -1,8 +1,4 @@
-"""Обработчики профиля: просмотр, привязка U-ON ID, обновление направления.
-
-Содержит центральный text_router — единую точку входа для всех текстовых
-сообщений пользователя (FSM-состояния и кнопки главного меню).
-"""
+# Профиль, U-ON айди и прочее
 
 import logging
 
@@ -20,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_profile_keyboard() -> list:
-    """Inline-клавиатура профиля."""
+    # кнопки в личном кабинете
     return [
         [Button.inline("✏️ Изменить U-ON ID", b"change_uon_id")],
         [Button.inline("🔄 Обновить направление", b"refresh_destination")],
@@ -28,12 +24,12 @@ def get_profile_keyboard() -> list:
 
 
 def get_cancel_keyboard() -> list:
-    """Inline-клавиатура с кнопкой отмены."""
+    # кнопка отмены
     return [[Button.inline("❌ Отмена", b"cancel_change_uon_id")]]
 
 
 async def _show_profile(event) -> None:
-    """Показывает профиль пользователя с U-ON ID и направлением."""
+    # рисуем инфу о пользователе
     async with AsyncSessionLocal() as session:
         user = await UserRepository.get_user(session, event.sender_id)
 
@@ -63,7 +59,7 @@ async def _show_profile(event) -> None:
 
 
 async def _handle_uon_id_input(event) -> None:
-    """Обрабатывает ввод нового U-ON ID от пользователя (FSM-состояние)."""
+    # ловим ввод цифр U-ON
     text = (event.text or "").strip()
     user_id = event.sender_id
 
@@ -98,7 +94,7 @@ async def _handle_uon_id_input(event) -> None:
 
 
 async def _send_invite_result(event, result: InviteResult) -> None:
-    """Отправляет пользователю результат проверки направления и invite-ссылок."""
+    # выплевываем результат проверки и ссылки
     if not result.destination:
         await event.respond("Для данного идентификатора активных туров пока не найдено.")
         return
@@ -125,18 +121,14 @@ async def _send_invite_result(event, result: InviteResult) -> None:
 
 
 def register_profile_handlers(client: TelegramClient) -> None:
-    """Регистрирует хэндлеры профиля и центральный text_router.
+    # регаем профиль и текстовый роутер
 
-    text_router регистрируется первым и обрабатывает все текстовые сообщения:
-    - Команды (начинаются с '/') — пропускаются, у них свои хэндлеры
-    - FSM-состояния (ввод U-ON ID) — приоритет выше кнопок
-    - Кнопки главного меню — маршрутизируются по тексту
-    """
-
-    @client.on(events.NewMessage(func=lambda e: e.is_private and bool(e.text)))
+    @client.on(events.NewMessage(
+        func=lambda e: e.is_private and bool(e.text) and not e.text.startswith('/')
+    ))
     @throttled
     async def text_router(event) -> None:
-        """Центральный маршрутизатор текстовых сообщений."""
+        # разруливаем текстовые сообщения
         text = event.text or ""
 
         # Команды обрабатываются отдельными хэндлерами
@@ -168,12 +160,12 @@ def register_profile_handlers(client: TelegramClient) -> None:
     @client.on(events.NewMessage(pattern=r"^/profile(?:@\w+)?$", func=lambda e: e.is_private))
     @throttled
     async def cmd_profile(event) -> None:
-        """Команда /profile — показывает профиль."""
+        # показать профиль
         await _show_profile(event)
 
     @client.on(events.CallbackQuery(data=b"change_uon_id"))
     async def process_change_uon_id(event) -> None:
-        """Начинает процесс изменения U-ON ID."""
+        # меняем U-ON ID
         set_state(event.sender_id, WAITING_FOR_UON_ID)
         try:
             # Убираем клавиатуру профиля, чтобы не путать пользователя
@@ -191,7 +183,7 @@ def register_profile_handlers(client: TelegramClient) -> None:
 
     @client.on(events.CallbackQuery(data=b"cancel_change_uon_id"))
     async def process_cancel_change_uon_id(event) -> None:
-        """Отмена изменения U-ON ID."""
+        # отмена смены ID
         clear_state(event.sender_id)
         await event.edit(
             "Изменение U-ON ID отменено. Профиль можно открыть кнопкой меню или командой /profile."
@@ -200,7 +192,7 @@ def register_profile_handlers(client: TelegramClient) -> None:
 
     @client.on(events.CallbackQuery(data=b"refresh_destination"))
     async def process_refresh_destination(event) -> None:
-        """Обновляет информацию о направлении и генерирует новые ссылки."""
+        # обновить инфу по туру
         async with AsyncSessionLocal() as session:
             user = await UserRepository.get_user(session, event.sender_id)
 

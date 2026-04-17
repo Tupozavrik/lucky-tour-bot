@@ -1,4 +1,4 @@
-"""Менеджер тематических чатов: генерация безопасных (одноразовых) invite-ссылок (Telethon)."""
+# Управление чатами и ссылками
 
 import logging
 
@@ -15,7 +15,7 @@ class ChatManager:
 
     @staticmethod
     async def generate_invite_links(client: TelegramClient, destination: str) -> list[dict]:
-        """Возвращает новые одноразовые пригласительные ссылки для чатов нужного направления."""
+        # создаем ссылки под нужное направление
         dest_chats = THEMATIC_CHATS.get(destination)
         if not dest_chats:
             logger.warning("Чаты для направления '%s' не настроены", destination)
@@ -34,7 +34,7 @@ class ChatManager:
 # --- Вспомогательные функции ---
 
 async def _create_invite_link(client: TelegramClient, chat_id: int, destination: str) -> str | None:
-    """Создаёт динамическую одноразовую invite-ссылку (member_limit=1)."""
+    # делаем одноразовую ссылку в телеге
     try:
         invite = await client(ExportChatInviteRequest(
             peer=chat_id,
@@ -60,7 +60,7 @@ async def _create_invite_link(client: TelegramClient, chat_id: int, destination:
 
 
 def _get_chat_display_name(chat_type: str, destination: str) -> str:
-    """Возвращает читаемое название чата для отображения пользователю."""
+    # красивое имя для чата
     names = {
         "main":   "Туристы Lucky Tour",
         "secret": "Секретные места и экскурсии",

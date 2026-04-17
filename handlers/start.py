@@ -1,12 +1,9 @@
-"""Обработчики команды /start и DeepLink-привязки (Telethon)."""
+# Всё, что касается /start и первой привязки
 
 import logging
 
 from telethon import TelegramClient, events, Button
-from telethon.tl.types import (
-    ReplyKeyboardMarkup, KeyboardButtonRow,
-    KeyboardButtonWebView, KeyboardButton,
-)
+from telethon.tl.types import KeyboardButtonSimpleWebView
 
 from config import WEB_APP_URL
 from database import AsyncSessionLocal
@@ -19,25 +16,21 @@ from utils.throttle import throttled
 logger = logging.getLogger(__name__)
 
 
-def get_main_keyboard() -> ReplyKeyboardMarkup:
-    """Главное Reply-меню бота."""
-    return ReplyKeyboardMarkup(
-        rows=[
-            KeyboardButtonRow(buttons=[
-                KeyboardButtonWebView(text="🌐 Веб-приложение", url=WEB_APP_URL),
-                KeyboardButton(text="👤 Профиль"),
-            ]),
-            KeyboardButtonRow(buttons=[
-                KeyboardButton(text="⚙️ Настройки"),
-                KeyboardButton(text="💬 Поддержка"),
-            ]),
+def get_main_keyboard() -> list:
+    # главные кнопки внизу экрана
+    return [
+            KeyboardButtonSimpleWebView(text="🌐 Веб-приложение", url=WEB_APP_URL), 
+            Button.text("👤 Профиль", resize=True)
         ],
-        resize=True,
-    )
+        [
+            Button.text("⚙️ Настройки"), 
+            Button.text("💬 Поддержка")
+        ],
+    ]
 
 
 def register_start_handlers(client: TelegramClient) -> None:
-    """Регистрирует хэндлеры /start и связанных callback-запросов."""
+    # вешаем хэндлеры старта
 
     @client.on(events.NewMessage(
         pattern=r'^/start(?:@\w+)?(?:\s(.+))?$',
@@ -45,7 +38,7 @@ def register_start_handlers(client: TelegramClient) -> None:
     ))
     @throttled
     async def cmd_start(event) -> None:
-        """Обработка /start с опциональным DeepLink (t.me/bot?start=id84756)."""
+        # сама команда /start
         user_id = event.sender_id
         sender = await event.get_sender()
         first_name = (getattr(sender, "first_name", None) or "друг")
@@ -89,7 +82,7 @@ def register_start_handlers(client: TelegramClient) -> None:
 
     @client.on(events.CallbackQuery(pattern=rb"^enable_autoadd_(.+)$"))
     async def process_enable_autoadd(event) -> None:
-        """Пользователь согласился на добавление в тематические чаты."""
+        """Подтверждение автодобавления."""
         uon_id = event.pattern_match.group(1).decode()
         user_id = event.sender_id
 
@@ -120,7 +113,7 @@ def register_start_handlers(client: TelegramClient) -> None:
 
     @client.on(events.CallbackQuery(data=b"disable_autoadd"))
     async def process_disable_autoadd(event) -> None:
-        """Пользователь отказался от приглашений в чаты."""
+        """Отказ от автодобавления."""
         async with AsyncSessionLocal() as session:
             await UserRepository.set_auto_add(session, event.sender_id, False)
             await session.commit()
