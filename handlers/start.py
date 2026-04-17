@@ -19,14 +19,17 @@ logger = logging.getLogger(__name__)
 def get_main_keyboard() -> list:
     # главные кнопки внизу экрана
     return [
+        [
             KeyboardButtonSimpleWebView(text="🌐 Веб-приложение", url=WEB_APP_URL), 
             Button.text("👤 Профиль", resize=True)
         ],
         [
             Button.text("⚙️ Настройки"), 
             Button.text("💬 Поддержка")
-        ],
+        ]
     ]
+
+    
 
 
 def register_start_handlers(client: TelegramClient) -> None:
